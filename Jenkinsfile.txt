@@ -1,12 +1,12 @@
-/*##############################################################################################
+/* #############################################################################################################################
 
 pipeline script in jenkins:::
 
-/*#####################################################################
+#############################################################################################################################
 # Script		: Pipeline Script for Assessment
 # Author		: Shiwangi Sharma
 # Creation Date	: 06/26/2021
-######################################################################*/
+############################################################################################################################# */
  
 
 pipeline {
@@ -27,35 +27,47 @@ pipeline {
 		stage('Checkout') {
             steps {
 		
-		// Checkout code from github
-                checkout([$class: 'GitSCM', branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[credentialsId: 'af68e712-97b8-4258-bd9c-3a932c2cc192', url: 'https://github.com/shiwangisharma/Maven-Project.git']]])
+			// Checkout code from github
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[credentialsId: 'af68e712-97b8-4258-bd9c-3a932c2cc192', url: 'https://github.com/shiwangisharma/Maven-Project.git']]])
             }
             
         }
 	
 	
-		stage('Build') {
-            steps {            
+		stage('Quality Gates Status Check And Build') {
+            steps { 
+				script{
+						withSonarQubeEnv('sonarqube-server'){
+							sh "mvn sonar:sonar"
+						}						
+						
+						timeout(time:1, unit: 'HOURS'){
+							def q = waitForQualityGate()
+							if(q.status != 'OK'){
+							error "Pipeline aborted due to quality gates failure: (q.status)"
+							
+							}
+						
+						}
                 // Build using Maven by skipping Unit Tests. 			
                 bat "mvn -Dmaven.test.skip=true clean package"
 
                 }
             }
+		}	
 		
 		stage('Upload Artifacts in Nexus') {
             steps {               
-		 nexusArtifactUploader credentialsId: 'f63a4724-d9fe-492d-bfc0-0b7d8bd6ad58', groupId: 'com.demospringboot', nexusUrl: 'localhost:8082', nexusVersion: 'nexus3', protocol: 'http', repository: 'maven-snapshots', version: '1.0-SNAPSHOT'
+					nexusArtifactUploader credentialsId: 'f63a4724-d9fe-492d-bfc0-0b7d8bd6ad58', groupId: 'com.demospringboot', nexusUrl: 'localhost:8082', nexusVersion: 'nexus3', protocol: 'http', repository: 'maven-snapshots', version: '1.0-SNAPSHOT'
                 }            
           }
 		
 		
 		stage('Deploy Code on Tomcat') {
             steps {
-			// Run the app locally on local host: 8080
-			deploy adapters: [tomcat7(credentialsId: 'b4821e4d-5689-43bf-a454-06c684d19805', path: '', url: 'http://localhost:8080/')], contextPath: null, war: '**/*.war'
+				// Run the app locally on local host: 8080
+					deploy adapters: [tomcat7(credentialsId: 'b4821e4d-5689-43bf-a454-06c684d19805', path: '', url: 'http://localhost:8080/')], contextPath: null, war: '**/*.war'
                 }            
         }	
-		
-		
     }
 }
